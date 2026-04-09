@@ -1,0 +1,7 @@
+numpy>=1.24
+scipy>=1.10
+pandas>=2.0
+matplotlib>=3.7
+xarray>=2023.1
+echopype>=0.8
+openpyxl>=3.1

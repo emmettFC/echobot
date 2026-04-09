@@ -1,0 +1,45 @@
+# ---- Large / raw data ----
+data/echobot/
+data/ek80/
+data/hydrophone/
+data/ctd/
+data/zenodo_release/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+.pytest_cache/
+.coverage
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Jupyter ----
+.ipynb_checkpoints/
+*-checkpoint.ipynb
+
+# ---- Virtual environments ----
+.venv/
+venv/
+env/
+ENV/
+
+# ---- Editors / OS ----
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ---- Notebook outputs (optional — notebooks are committed with outputs for docs,
+#      but analysis output directories are gitignored) ----
+output/
+figures_out/

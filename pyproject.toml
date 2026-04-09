@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "echobot"
+version = "1.0.0"
+description = "EchoBot broadband echosounder — signal processing and validation code accompanying the MIT/WHOI calibration paper"
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Emmett Culhane", email = "emmettfculhane@gmail.com"},
+]
+keywords = [
+    "echosounder",
+    "broadband",
+    "target strength",
+    "calibration",
+    "mesopelagic",
+    "bioacoustics",
+    "EK80",
+    "signal processing",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "pandas>=2.0",
+    "matplotlib>=3.7",
+    "xarray>=2023.1",
+    "echopype>=0.8",
+    "openpyxl>=3.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "jupyter>=1.0",
+    "nbconvert>=7.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/emmettFC/echobot"
+Repository = "https://github.com/emmettFC/echobot"
+Issues = "https://github.com/emmettFC/echobot/issues"
+
+[tool.setuptools]
+packages = ["echobot"]
+
+[tool.setuptools.package-data]
+echobot = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
