@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>EchoBot Replay</title>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Courier New', monospace;
+    background: #0a0e17;
+    color: #c8d6e5;
+    overflow-x: hidden;
+  }
+
+  /* ---- Header bar ---- */
+  #header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 18px;
+    background: #111927;
+    border-bottom: 2px solid #1e90ff;
+  }
+  #header h1 { font-size: 26px; color: #1e90ff; letter-spacing: 2px; }
+  #header .info-block {
+    display: flex; gap: 22px; align-items: center; font-size: 14px;
+  }
+  #header .info-block span { color: #8899aa; }
+  #header .info-block .val { color: #1e90ff; font-weight: bold; }
+
+  /* ---- Mode / controls bar ---- */
+  #controls {
+    display: flex; align-items: center; gap: 14px;
+    padding: 6px 18px;
+    background: #0d1320;
+    border-bottom: 1px solid #1a2a3a;
+    font-size: 14px;
+  }
+  #controls label { color: #8899aa; }
+  #controls select, #controls button, #controls input {
+    background: #162030; color: #c8d6e5; border: 1px solid #2a3a50;
+    padding: 5px 12px; border-radius: 3px; font-family: inherit; font-size: 14px;
+  }
+  #controls button { cursor: pointer; }
+  #controls button:hover { background: #1e90ff; color: #fff; }
+  #controls button.active { background: #1e90ff; color: #fff; }
+
+  .mode-btn { min-width: 80px; text-align: center; }
+  .mode-btn.active-replay { background: #27ae60 !important; color: #fff !important; }
+  .mode-btn.active-watch { background: #e67e22 !important; color: #fff !important; }
+  .mode-btn.active-run { background: #e74c3c !important; color: #fff !important; }
+
+  /* ---- Transducer info box ---- */
+  #transducer-info {
+    display: none;
+    position: fixed; top: 80px; right: 20px; z-index: 100;
+    background: #111927; border: 1px solid #1e90ff; border-radius: 6px;
+    padding: 14px 20px; min-width: 300px; font-size: 14px;
+    box-shadow: 0 4px 20px rgba(30,144,255,0.3);
+  }
+  #transducer-info h3 { color: #1e90ff; margin-bottom: 8px; }
+  #transducer-info .row { display: flex; justify-content: space-between; padding: 2px 0; }
+  #transducer-info .row .lbl { color: #8899aa; }
+  #transducer-info .row .v { color: #c8d6e5; }
+
+  /* ---- CTD mini panel ---- */
+  #ctd-panel {
+    display: none;
+    position: fixed; top: 80px; left: 20px; z-index: 100;
+    background: #111927; border: 1px solid #27ae60; border-radius: 6px;
+    padding: 12px 16px; font-size: 14px; min-width: 200px;
+    box-shadow: 0 4px 20px rgba(39,174,96,0.3);
+  }
+  #ctd-panel h3 { color: #27ae60; margin-bottom: 6px; }
+  #ctd-panel .row { display: flex; justify-content: space-between; padding: 2px 0; }
+  #ctd-panel .row .lbl { color: #8899aa; }
+  #ctd-panel .row .v { color: #c8d6e5; }
+
+  /* ---- File browser modal ---- */
+  #file-browser {
+    display: none;
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: rgba(0,0,0,0.85); z-index: 200;
+    justify-content: center; align-items: center;
+  }
+  #file-browser .modal {
+    background: #111927; border: 1px solid #1e90ff; border-radius: 8px;
+    padding: 20px; width: 600px; max-height: 70vh; overflow-y: auto;
+  }
+  #file-browser h2 { color: #1e90ff; margin-bottom: 12px; }
+  #file-browser .file-item {
+    padding: 6px 10px; cursor: pointer; border-radius: 3px;
+    font-size: 13px; color: #c8d6e5;
+  }
+  #file-browser .file-item:hover { background: #1e3050; }
+  #file-browser .close-btn {
+    float: right; cursor: pointer; color: #e74c3c; font-size: 18px;
+  }
+
+  /* ---- Grid layout ---- */
+  #main-grid {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    grid-template-rows: 55% 45%;
+    gap: 4px;
+    padding: 6px;
+    height: calc(100vh - 96px);
+  }
+  .panel {
+    background: #0d1320;
+    border: 1px solid #1a2a3a;
+    border-radius: 4px;
+    position: relative;
+    min-height: 0;
+  }
+  #echogram-panel { grid-row: 1; grid-column: 1; }
+  #radial-panel { grid-row: 1; grid-column: 2; }
+  #bottom-left { grid-row: 2; grid-column: 1; }
+  #bottom-right { grid-row: 2; grid-column: 2;
+    display: grid; grid-template-rows: 1fr 1fr; gap: 4px;
+  }
+
+  /* ---- Ping counter ---- */
+  #ping-counter {
+    position: fixed; bottom: 10px; right: 18px;
+    font-size: 16px; color: #1e90ff; z-index: 50; font-weight: bold;
+  }
+
+  /* ---- Speed control ---- */
+  #speed-display { min-width: 50px; text-align: center; }
+
+  /* Plotly overrides */
+  .js-plotly-plot .plotly .modebar { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div id="header">
+  <h1>ECHOBOT REPLAY</h1>
+  <div class="info-block">
+    <span>File: <span class="val" id="hdr-fname">—</span></span>
+    <span>Chirp: <span class="val" id="hdr-chirp">—</span></span>
+    <span>Pings: <span class="val" id="hdr-npings">—</span></span>
+    <span>fs: <span class="val" id="hdr-fs">—</span></span>
+    <span>c: <span class="val" id="hdr-c">—</span> m/s</span>
+  </div>
+</div>
+
+<!-- Controls -->
+<div id="controls">
+  <button class="mode-btn active-replay" id="btn-replay" onclick="setMode('REPLAY')">REPLAY</button>
+  <button class="mode-btn" id="btn-watch" onclick="setMode('WATCH')">WATCH</button>
+  <button class="mode-btn" id="btn-run" onclick="setMode('RUN')">RUN</button>
+
+  <label>Depth Range:</label>
+  <select id="depth-range" onchange="onDepthChange()">
+    <option value="3.5">0 – 3.5 m (tank)</option>
+    <option value="5">0 – 5 m</option>
+    <option value="10">0 – 10 m</option>
+    <option value="20">0 – 20 m</option>
+    <option value="50">0 – 50 m</option>
+    <option value="100">0 – 100 m (full range)</option>
+  </select>
+
+  <button id="btn-ducer" onclick="toggleTransducerInfo()">Transducer Info</button>
+  <button id="btn-ctd" onclick="toggleCTD()">CTD</button>
+
+  <label>Speed:</label>
+  <button onclick="changeSpeed(-1)">−</button>
+  <span id="speed-display">1×</span>
+  <button onclick="changeSpeed(1)">+</button>
+
+  <label>Cal Offset:</label>
+  <input type="number" id="cal-offset" value="37.0" step="0.5" style="width:65px;" onchange="setCalOffset()">
+  <span style="color:#8899aa;">dB</span>
+
+  <button id="btn-play" onclick="togglePlay()" class="active">▶ Play</button>
+  <button onclick="resetReplay()">⟲ Reset</button>
+  <button id="btn-browse" onclick="openFileBrowser()">📂 Open File</button>
+</div>
+
+<!-- Transducer Info -->
+<div id="transducer-info">
+  <span class="close-btn" onclick="toggleTransducerInfo()">✕</span>
+  <h3>Transducer Connected</h3>
+  <div class="row"><span class="lbl">Model</span><span class="v" id="ti-model">—</span></div>
+  <div class="row"><span class="lbl">Freq Band</span><span class="v" id="ti-band">—</span></div>
+  <div class="row"><span class="lbl">Chirp Type</span><span class="v" id="ti-chirp">—</span></div>
+  <div class="row"><span class="lbl">Chirp Duration</span><span class="v" id="ti-td">—</span></div>
+  <div class="row"><span class="lbl">TX Scale</span><span class="v" id="ti-scale">—</span></div>
+  <div class="row"><span class="lbl">Channels</span><span class="v" id="ti-ch">—</span></div>
+  <div class="row"><span class="lbl">Sample Rate</span><span class="v" id="ti-fs">—</span></div>
+  <div class="row"><span class="lbl">Sound Speed</span><span class="v" id="ti-c">—</span></div>
+  <div class="row"><span class="lbl">Target Radius</span><span class="v" id="ti-a">—</span></div>
+</div>
+
+<!-- CTD Panel -->
+<div id="ctd-panel">
+  <h3>CTD Profile</h3>
+  <div class="row"><span class="lbl">Temperature</span><span class="v" id="ctd-temp">15.2 °C</span></div>
+  <div class="row"><span class="lbl">Salinity</span><span class="v" id="ctd-sal">30.1 PSU</span></div>
+  <div class="row"><span class="lbl">Depth</span><span class="v" id="ctd-depth">1.5 m</span></div>
+  <div class="row"><span class="lbl">Sound Speed</span><span class="v" id="ctd-c">1484.96 m/s</span></div>
+  <div style="margin-top:8px; font-size:11px; color:#556;">
+    <input type="file" id="ctd-file" accept=".csv,.txt" style="font-size:11px;" onchange="loadCTD(event)">
+  </div>
+</div>
+
+<!-- File Browser -->
+<div id="file-browser" onclick="closeFileBrowser(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <span class="close-btn" onclick="closeFileBrowser()">✕</span>
+    <h2>Select Data File</h2>
+    <div id="file-list"></div>
+  </div>
+</div>
+
+<!-- Main panels -->
+<div id="main-grid">
+  <div class="panel" id="echogram-panel">
+    <div id="echogram-plot" style="width:100%;height:100%;"></div>
+  </div>
+  <div class="panel" id="radial-panel">
+    <div id="radial-plot" style="width:100%;height:100%;"></div>
+  </div>
+  <div class="panel" id="bottom-left">
+    <div id="tsf-plot" style="width:100%;height:100%;"></div>
+  </div>
+  <div id="bottom-right">
+    <div class="panel">
+      <div id="amplitude-plot" style="width:100%;height:100%;"></div>
+    </div>
+  </div>
+</div>
+
+<div id="ping-counter">Ping: <span id="pc-val">0</span> / <span id="pc-total">0</span></div>
+
+<script>
+// =========================================================================
+//  State
+// =========================================================================
+let currentPath = null;
+let fileInfo = null;
+let currentPing = 0;
+let playing = false;
+let playTimer = null;
+let speedMultiplier = 1;
+let depthMax = 3.5;
+let mode = 'REPLAY';
+
+// Echogram accumulator
+let echogramData = [];  // array of {range, env_db} per ping
+let echogramZ = null;   // 2D array [range_bins x pings]
+let nRangeBins = 200;
+
+// Floor range for 1/r^2 display
+const FLOOR_RANGE = 2.9;
+
+// =========================================================================
+//  Init
+// =========================================================================
+window.addEventListener('load', () => {
+  initPlots();
+  loadFile(null);  // default
+});
+
+function initPlots() {
+  const darkLayout = {
+    paper_bgcolor: '#0d1320',
+    plot_bgcolor: '#0d1320',
+    font: { color: '#c8d6e5', family: 'Courier New', size: 13 },
+    margin: { l: 60, r: 18, t: 40, b: 45 },
+  };
+
+  // EK500 colorscale (Simrad standard 12-color palette)
+  const ek500 = [
+    [0.000, 'rgb(255,255,255)'],  // white
+    [0.091, 'rgb(159,159,159)'],  // gray
+    [0.182, 'rgb(95,95,95)'],     // dark gray
+    [0.273, 'rgb(0,0,255)'],      // blue
+    [0.364, 'rgb(0,0,127)'],      // dark blue
+    [0.455, 'rgb(0,191,0)'],      // green
+    [0.545, 'rgb(0,127,0)'],      // dark green
+    [0.636, 'rgb(255,255,0)'],    // yellow
+    [0.727, 'rgb(255,127,0)'],    // orange
+    [0.818, 'rgb(255,0,191)'],    // magenta
+    [0.909, 'rgb(255,0,0)'],      // red
+    [1.000, 'rgb(166,83,60)'],    // brown
+  ];
+
+  // Echogram
+  Plotly.newPlot('echogram-plot', [{
+    z: [[0]],
+    type: 'heatmap',
+    colorscale: ek500,
+    zmin: -40, zmax: 60,
+    colorbar: { title: 'dB', titleside: 'right', thickness: 12, len: 0.8 },
+  }], {
+    ...darkLayout,
+    title: { text: 'Echogram', font: { size: 16, color: '#1e90ff' } },
+    xaxis: { title: 'Ping #', color: '#8899aa' },
+    yaxis: { title: 'Range [m]', color: '#8899aa', autorange: 'reversed' },
+  }, { responsive: true, displayModeBar: false });
+
+  // Radial / target localization — with beam-pattern circles
+  // Generate circle traces for concentric beam regions
+  function makeCircle(r, color, dash) {
+    const n = 80;
+    const x = [], y = [];
+    for (let i = 0; i <= n; i++) {
+      const theta = (2 * Math.PI * i) / n;
+      x.push(r * Math.cos(theta));
+      y.push(r * Math.sin(theta));
+    }
+    return { x, y, mode: 'lines', type: 'scatter',
+      line: { color, width: 1, dash: dash || 'solid' },
+      hoverinfo: 'skip', showlegend: false };
+  }
+
+  Plotly.newPlot('radial-plot', [
+    makeCircle(1, '#2a3a50', 'dot'),    // 1° ring
+    makeCircle(2, '#2a3a50', 'dot'),    // 2° ring
+    makeCircle(3, '#2a3a50', 'dot'),    // 3° ring
+    makeCircle(5, '#3a4a60', 'dash'),   // 5° ring (beam edge)
+    // Crosshairs
+    { x: [-7, 7], y: [0, 0], mode: 'lines', type: 'scatter',
+      line: { color: '#2a3a50', width: 0.5 }, hoverinfo: 'skip', showlegend: false },
+    { x: [0, 0], y: [-7, 7], mode: 'lines', type: 'scatter',
+      line: { color: '#2a3a50', width: 0.5 }, hoverinfo: 'skip', showlegend: false },
+    // History dots
+    { x: [], y: [], mode: 'markers', type: 'scatter',
+      marker: { color: '#1e90ff', size: 3, opacity: 0.4 }, name: 'History' },
+    // Current position
+    { x: [0], y: [0], mode: 'markers', type: 'scatter',
+      marker: { color: '#e74c3c', size: 12, symbol: 'circle-open', line: { width: 2 } },
+      name: 'Current' },
+  ], {
+    ...darkLayout,
+    title: { text: 'Target Localization', font: { size: 16, color: '#1e90ff' } },
+    xaxis: { title: 'Angle [°]', range: [-7, 7], color: '#8899aa',
+             gridcolor: 'rgba(0,0,0,0)', zerolinecolor: 'rgba(0,0,0,0)' },
+    yaxis: { title: 'Angle [°]', range: [-7, 7], color: '#8899aa',
+             gridcolor: 'rgba(0,0,0,0)', zerolinecolor: 'rgba(0,0,0,0)',
+             scaleanchor: 'x', scaleratio: 1 },
+    showlegend: false,
+  }, { responsive: true, displayModeBar: false });
+
+  // Amplitude
+  Plotly.newPlot('amplitude-plot', [
+    { x: [], y: [], type: 'scatter', mode: 'lines',
+      line: { color: '#1e90ff', width: 1 }, name: 'Envelope' },
+  ], {
+    ...darkLayout,
+    title: { text: 'MF Envelope [dB]', font: { size: 16, color: '#1e90ff' } },
+    xaxis: { title: 'Range [m]', range: [0, depthMax], color: '#8899aa' },
+    yaxis: { title: 'dB', autorange: true, color: '#8899aa' },
+    showlegend: false,
+  }, { responsive: true, displayModeBar: false });
+
+  // TS(f)
+  Plotly.newPlot('tsf-plot', [
+    { x: [], y: [], type: 'scatter', mode: 'lines',
+      line: { color: 'rgba(200,200,200,0.3)', width: 1 }, name: 'This ping' },
+    { x: [], y: [], type: 'scatter', mode: 'lines',
+      line: { color: '#1e90ff', width: 2 }, name: 'Running mean' },
+  ], {
+    ...darkLayout,
+    title: { text: 'TS(f)', font: { size: 16, color: '#1e90ff' } },
+    xaxis: { title: 'Frequency [kHz]', color: '#8899aa' },
+    yaxis: { title: 'TS(f) [dB]', color: '#8899aa' },
+    showlegend: true,
+    legend: { x: 0.02, y: 0.02, bgcolor: 'rgba(0,0,0,0)' },
+  }, { responsive: true, displayModeBar: false });
+}
+
+// =========================================================================
+//  File loading
+// =========================================================================
+async function loadFile(path) {
+  stopPlay();
+  currentPing = 0;
+  echogramData = [];
+  echogramZ = null;
+
+  const body = path ? { path } : {};
+  const resp = await fetch('/api/file_info', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  fileInfo = await resp.json();
+  currentPath = fileInfo.path;
+
+  // Update header
+  document.getElementById('hdr-fname').textContent = fileInfo.fname;
+  document.getElementById('hdr-chirp').textContent =
+    `${fileInfo.chirp_type} ${(fileInfo.fqi/1e3).toFixed(0)}–${(fileInfo.fqf/1e3).toFixed(0)} kHz`;
+  document.getElementById('hdr-npings').textContent = fileInfo.npings;
+  document.getElementById('hdr-fs').textContent = `${(fileInfo.fs/1e6).toFixed(1)} MHz`;
+  document.getElementById('hdr-c').textContent = fileInfo.c.toFixed(1);
+  document.getElementById('pc-total').textContent = fileInfo.npings;
+
+  // Update cal offset
+  document.getElementById('cal-offset').value = fileInfo.cal_offset_db || 37.0;
+
+  // Update transducer info
+  document.getElementById('ti-model').textContent = fileInfo.transducer;
+  document.getElementById('ti-band').textContent =
+    `${(Math.min(fileInfo.fqi,fileInfo.fqf)/1e3).toFixed(0)}–${(Math.max(fileInfo.fqi,fileInfo.fqf)/1e3).toFixed(0)} kHz`;
+  document.getElementById('ti-chirp').textContent = fileInfo.chirp_type;
+  document.getElementById('ti-td').textContent = `${(fileInfo.t_d*1e3).toFixed(1)} ms`;
+  document.getElementById('ti-scale').textContent = `${fileInfo.scale} dB`;
+  document.getElementById('ti-ch').textContent = `${fileInfo.nc} (3 sector)`;
+  document.getElementById('ti-fs').textContent = `${(fileInfo.fs/1e6).toFixed(1)} MHz`;
+  document.getElementById('ti-c').textContent = `${fileInfo.c.toFixed(1)} m/s`;
+  document.getElementById('ti-a').textContent = `${(fileInfo.target_radius*1000).toFixed(1)} mm`;
+
+  // Reset echogram
+  resetEchogramBuffer();
+
+  // Auto-play
+  startPlay();
+}
+
+function resetEchogramBuffer() {
+  if (!fileInfo) return;
+  echogramZ = [];
+  for (let i = 0; i < nRangeBins; i++) {
+    echogramZ.push(new Array(fileInfo.npings).fill(null));
+  }
+}
+
+// =========================================================================
+//  Ping processing
+// =========================================================================
+async function fetchAndDisplayPing(pingIdx) {
+  const resp = await fetch('/api/ping', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: currentPath, ping_idx: pingIdx }),
+  });
+  const d = await resp.json();
+  if (d.error) { console.error(d.error); return; }
+
+  document.getElementById('pc-val').textContent = pingIdx + 1;
+
+  // --- Update amplitude panel ---
+  Plotly.update('amplitude-plot', {
+    x: [d.range],
+    y: [d.envelope_db],
+  }, {}, [0]);
+
+  // Add 1/r^2 line if depth exceeds floor
+  if (depthMax > FLOOR_RANGE + 0.5) {
+    // Theoretical 1/r^2 decay line from target peak
+    const r0 = d.target_range || 1.4;
+    const rLine = [];
+    const dbLine = [];
+    const peakIdx = d.envelope_db.indexOf(Math.max(...d.envelope_db.filter(v => v !== null)));
+    const peakDb = d.envelope_db[peakIdx] || 40;
+    for (let r = r0; r <= depthMax; r += 0.05) {
+      rLine.push(r);
+      dbLine.push(peakDb - 20 * Math.log10(r / r0));
+    }
+    if (document.getElementById('amplitude-plot').data.length < 2) {
+      Plotly.addTraces('amplitude-plot', {
+        x: rLine, y: dbLine, mode: 'lines',
+        line: { color: '#e74c3c', width: 1, dash: 'dash' }, name: '1/r²',
+      });
+    } else {
+      Plotly.update('amplitude-plot', { x: [rLine], y: [dbLine] }, {}, [1]);
+    }
+  }
+
+  Plotly.relayout('amplitude-plot', { 'xaxis.range': [0, depthMax] });
+
+  // --- Update radial / localization ---
+  // Traces 0-5 are circles/crosshairs, 6=history, 7=current
+  if (d.a1_deg !== null) {
+    Plotly.update('radial-plot', {
+      x: [d.loc_history_a2, [d.a2_deg]],
+      y: [d.loc_history_a1, [d.a1_deg]],
+    }, {}, [6, 7]);
+  }
+
+  // --- Update TS(f) ---
+  if (d.tsf_this) {
+    Plotly.update('tsf-plot', {
+      x: [d.f_band_khz, d.f_band_khz],
+      y: [d.tsf_this, d.tsf_mean],
+    }, {}, [0, 1]);
+
+    const titleText = d.tsf_range
+      ? `TS(f)  |  Ping ${pingIdx+1}  |  target @ ${d.tsf_range.toFixed(2)} m`
+      : 'TS(f)';
+    Plotly.relayout('tsf-plot', { 'title.text': titleText });
+  }
+
+  // --- Update echogram ---
+  updateEchogram(d, pingIdx);
+}
+
+function updateEchogram(d, pingIdx) {
+  if (!echogramZ) return;
+
+  // Resample envelope to nRangeBins
+  const rangeStep = depthMax / nRangeBins;
+  for (let i = 0; i < nRangeBins; i++) {
+    const rTarget = i * rangeStep;
+    // Find closest range index in d.range
+    let bestIdx = 0;
+    let bestDist = Math.abs(d.range[0] - rTarget);
+    for (let j = 1; j < d.range.length; j++) {
+      const dist = Math.abs(d.range[j] - rTarget);
+      if (dist < bestDist) { bestDist = dist; bestIdx = j; }
+      if (d.range[j] > rTarget + rangeStep) break;
+    }
+    echogramZ[i][pingIdx] = d.envelope_db[bestIdx];
+  }
+
+  // Build range axis
+  const rangeAxis = [];
+  for (let i = 0; i < nRangeBins; i++) rangeAxis.push(i * rangeStep);
+
+  Plotly.update('echogram-plot', {
+    z: [echogramZ],
+    x: [Array.from({length: fileInfo.npings}, (_, i) => i + 1)],
+    y: [rangeAxis],
+  }, {
+    'yaxis.range': [depthMax, 0],
+  }, [0]);
+}
+
+// =========================================================================
+//  Playback control
+// =========================================================================
+function togglePlay() {
+  if (playing) stopPlay(); else startPlay();
+}
+
+function startPlay() {
+  if (!fileInfo) return;
+  playing = true;
+  document.getElementById('btn-play').textContent = '⏸ Pause';
+  document.getElementById('btn-play').classList.add('active');
+  scheduleNext();
+}
+
+function stopPlay() {
+  playing = false;
+  if (playTimer) { clearTimeout(playTimer); playTimer = null; }
+  document.getElementById('btn-play').textContent = '▶ Play';
+  document.getElementById('btn-play').classList.remove('active');
+}
+
+function scheduleNext() {
+  if (!playing || !fileInfo) return;
+  if (currentPing >= fileInfo.npings) { stopPlay(); return; }
+
+  fetchAndDisplayPing(currentPing).then(() => {
+    currentPing++;
+    if (currentPing >= fileInfo.npings) { stopPlay(); return; }
+    const delay = Math.max(30, 200 / speedMultiplier);
+    playTimer = setTimeout(scheduleNext, delay);
+  });
+}
+
+function resetReplay() {
+  stopPlay();
+  currentPing = 0;
+  document.getElementById('pc-val').textContent = '0';
+
+  // Re-load file to reset accumulators
+  if (currentPath) loadFile(currentPath);
+}
+
+function changeSpeed(delta) {
+  const speeds = [0.25, 0.5, 1, 2, 4, 8, 16];
+  let idx = speeds.indexOf(speedMultiplier);
+  if (idx < 0) idx = 2;
+  idx = Math.max(0, Math.min(speeds.length - 1, idx + delta));
+  speedMultiplier = speeds[idx];
+  document.getElementById('speed-display').textContent = speedMultiplier + '×';
+}
+
+// =========================================================================
+//  Controls
+// =========================================================================
+function setMode(m) {
+  mode = m;
+  ['btn-replay', 'btn-watch', 'btn-run'].forEach(id => {
+    const el = document.getElementById(id);
+    el.className = 'mode-btn';
+  });
+  const activeBtn = document.getElementById('btn-' + m.toLowerCase());
+  activeBtn.classList.add('active-' + m.toLowerCase());
+
+  // Show/hide file browser button in WATCH mode
+  document.getElementById('btn-browse').style.display =
+    (m === 'WATCH') ? 'inline-block' : 'inline-block';
+
+  // Show CTD in REPLAY mode
+  if (m === 'REPLAY') {
+    // CTD available
+  }
+}
+
+function onDepthChange() {
+  depthMax = parseFloat(document.getElementById('depth-range').value);
+  Plotly.relayout('amplitude-plot', { 'xaxis.range': [0, depthMax] });
+  Plotly.relayout('echogram-plot', { 'yaxis.range': [depthMax, 0] });
+
+  // Reset echogram buffer for new range
+  resetEchogramBuffer();
+
+  // If we already have pings, we need to re-process (or just continue from here)
+  if (currentPing > 0 && fileInfo) {
+    // Re-start from current ping (existing data is lost for the range change)
+    const wasPing = currentPing;
+    currentPing = 0;
+    // Quick: just continue from where we were
+    currentPing = wasPing;
+  }
+}
+
+async function setCalOffset() {
+  const offset = parseFloat(document.getElementById('cal-offset').value) || 37.0;
+  if (!currentPath) return;
+  await fetch('/api/set_cal_offset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: currentPath, cal_offset_db: offset }),
+  });
+  // Reset and re-run to show updated values
+  resetReplay();
+}
+
+function toggleTransducerInfo() {
+  const el = document.getElementById('transducer-info');
+  el.style.display = (el.style.display === 'block') ? 'none' : 'block';
+}
+
+function toggleCTD() {
+  const el = document.getElementById('ctd-panel');
+  el.style.display = (el.style.display === 'block') ? 'none' : 'block';
+}
+
+function loadCTD(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const text = e.target.result;
+    const lines = text.trim().split('\n');
+    // Simple CSV: temp, sal, depth, c
+    if (lines.length >= 2) {
+      const vals = lines[1].split(',');
+      if (vals.length >= 4) {
+        document.getElementById('ctd-temp').textContent = parseFloat(vals[0]).toFixed(1) + ' °C';
+        document.getElementById('ctd-sal').textContent = parseFloat(vals[1]).toFixed(1) + ' PSU';
+        document.getElementById('ctd-depth').textContent = parseFloat(vals[2]).toFixed(1) + ' m';
+        document.getElementById('ctd-c').textContent = parseFloat(vals[3]).toFixed(2) + ' m/s';
+      }
+    }
+  };
+  reader.readAsText(file);
+}
+
+// =========================================================================
+//  File browser
+// =========================================================================
+async function openFileBrowser() {
+  const resp = await fetch('/api/browse');
+  const data = await resp.json();
+
+  const listEl = document.getElementById('file-list');
+  listEl.innerHTML = '';
+
+  // Group by directory
+  const groups = {};
+  data.files.forEach(f => {
+    const parts = f.name.split('/');
+    const dir = parts.length > 1 ? parts[0] : 'root';
+    if (!groups[dir]) groups[dir] = [];
+    groups[dir].push(f);
+  });
+
+  for (const [dir, files] of Object.entries(groups)) {
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'color:#1e90ff; font-weight:bold; margin:10px 0 4px; font-size:13px;';
+    hdr.textContent = '📁 ' + dir;
+    listEl.appendChild(hdr);
+
+    files.forEach(f => {
+      const item = document.createElement('div');
+      item.className = 'file-item';
+      item.textContent = f.name.split('/').pop();
+      item.onclick = () => {
+        loadFile(f.path);
+        document.getElementById('file-browser').style.display = 'none';
+      };
+      listEl.appendChild(item);
+    });
+  }
+
+  document.getElementById('file-browser').style.display = 'flex';
+}
+
+function closeFileBrowser(event) {
+  if (!event || event.target === document.getElementById('file-browser')) {
+    document.getElementById('file-browser').style.display = 'none';
+  }
+}
+
+// =========================================================================
+//  Window resize
+// =========================================================================
+window.addEventListener('resize', () => {
+  Plotly.Plots.resize('echogram-plot');
+  Plotly.Plots.resize('radial-plot');
+  Plotly.Plots.resize('amplitude-plot');
+  Plotly.Plots.resize('tsf-plot');
+});
+</script>
+</body>
+</html>

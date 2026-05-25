@@ -20,6 +20,32 @@ This repository is the frozen reference implementation accompanying the manuscri
 | [`docs/`](docs/) | Pipeline provenance, sonar-equation parameter reference, data layout |
 | [`data/`](data/) | Small reference assets (NOAA sphere TS(f), EK80 software validation CSVs); raw data is hosted externally — see [`docs/DATA.md`](docs/DATA.md) |
 | [`tests/`](tests/) | Synthetic-data smoke tests runnable without the large raw archive |
+| [`replay_app/`](replay_app/) | Browser-based replay interface for EchoBot `.mat` data files — see [Replay App](#replay-app) below |
+
+## Replay App
+
+An interactive browser-based replay interface for visualizing EchoBot data files in real time. Replays `.mat` recordings with the same matched-filter processing used in the analysis pipeline, displaying a live echogram, split-beam target localization, TS(f) spectra, and matched-filter envelope.
+
+![EchoBot Replay App](docs/figures/replay_app.png)
+
+**Features:**
+- **Echogram** (EK500 colormap) — depth × ping heatmap that fills sequentially during replay, with selectable depth range
+- **Target localization** — split-beam phase-difference angles with history overlay and concentric beam-pattern rings
+- **TS(f)** — per-ping and running-mean target-strength spectra (90–150 kHz), with adjustable calibration offset (default +37 dB electronics gain)
+- **MF envelope** — matched-filter amplitude vs range with 1/r² theoretical decay reference
+- **Mode selector** — REPLAY / WATCH / RUN modes; file browser for selecting recordings
+- **Transducer info** — displays connected transducer parameters, chirp configuration, and acquisition settings
+- **CTD import** — load environmental profiles (temperature, salinity, sound speed) from CSV
+
+**Run it:**
+
+```bash
+cd replay_app
+pip install flask scipy numpy
+python app.py
+```
+
+Then open http://localhost:5050 in a browser. The app loads the default CRL test file and begins replaying automatically.
 
 ## Installation
 
