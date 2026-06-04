@@ -595,15 +595,78 @@ function setMode(m) {
   const activeBtn = document.getElementById('btn-' + m.toLowerCase());
   activeBtn.classList.add('active-' + m.toLowerCase());
 
-  // Show/hide file browser button in WATCH mode
+  // Show/hide file browser button
   document.getElementById('btn-browse').style.display =
     (m === 'WATCH') ? 'inline-block' : 'inline-block';
 
-  // Show CTD in REPLAY mode
-  if (m === 'REPLAY') {
-    // CTD available
+  // Update play button for RUN mode
+  const playBtn = document.getElementById('btn-play');
+  if (m === 'RUN') {
+    playBtn.textContent = '⏺ Acquire';
+    playBtn.onclick = startAcquisition;
+  } else {
+    playBtn.textContent = '▶ Play';
+    playBtn.onclick = togglePlay;
   }
 }
+
+// RUN mode: live DAQ acquisition
+let runPolling = null;
+
+async function startAcquisition() {
+  if (_runActive) {
+    // Stop acquisition
+    await fetch('/api/run/stop', { method: 'POST' });
+    document.getElementById('btn-play').textContent = '⏺ Acquire';
+    _runActive = false;
+    if (runPolling) { clearInterval(runPolling); runPolling = null; }
+    return;
+  }
+
+  const numPings = parseInt(prompt('Number of pings:', '100')) || 100;
+  const simulate = confirm('Simulate? (OK = simulated, Cancel = hardware DAQ)');
+
+  const resp = await fetch('/api/run/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      num_pings: numPings,
+      simulate: simulate,
+      scale_db: parseFloat(document.getElementById('cal-offset').value) || 3.0,
+    }),
+  });
+  const result = await resp.json();
+
+  if (result.status === 'started') {
+    _runActive = true;
+    document.getElementById('btn-play').textContent = '⏹ Stop';
+
+    // Poll acquisition status
+    runPolling = setInterval(async () => {
+      const sr = await fetch('/api/run/status');
+      const st = await sr.json();
+      document.getElementById('ping-counter').textContent =
+        `Ping: ${st.ping} / ${st.total}`;
+
+      if (!st.active) {
+        clearInterval(runPolling);
+        runPolling = null;
+        _runActive = false;
+        document.getElementById('btn-play').textContent = '⏺ Acquire';
+
+        // Auto-load the saved file into replay
+        if (st.latest_file) {
+          await loadFile(st.latest_file);
+          setMode('REPLAY');
+        }
+      }
+    }, 500);
+  } else {
+    alert('Error: ' + (result.error || 'Unknown'));
+  }
+}
+
+let _runActive = false;
 
 function onDepthChange() {
   depthMax = parseFloat(document.getElementById('depth-range').value);

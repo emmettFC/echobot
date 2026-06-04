@@ -34,6 +34,7 @@ An interactive browser-based replay interface for visualizing EchoBot data files
 - **TS(f)** — per-ping and running-mean target-strength spectra (90–150 kHz), with adjustable calibration offset (default +37 dB electronics gain)
 - **MF envelope** — matched-filter amplitude vs range with 1/r² theoretical decay reference
 - **Mode selector** — REPLAY / WATCH / RUN modes; file browser for selecting recordings
+- **RUN mode** — live DAQ acquisition via the `nidaqmx` Python package (NI USB-6366), with simulated mode for testing without hardware. See [`replay_app/DAQ_PORT.md`](replay_app/DAQ_PORT.md) for the MATLAB→Python port documentation.
 - **Transducer info** — displays connected transducer parameters, chirp configuration, and acquisition settings
 - **CTD import** — load environmental profiles (temperature, salinity, sound speed) from CSV
 
@@ -41,11 +42,11 @@ An interactive browser-based replay interface for visualizing EchoBot data files
 
 ```bash
 cd replay_app
-pip install flask scipy numpy
+pip install flask scipy numpy nidaqmx
 python app.py
 ```
 
-Then open http://localhost:5050 in a browser. The app loads the default CRL test file and begins replaying automatically.
+Then open http://localhost:5050 in a browser. The app loads the default CRL test file and begins replaying automatically. For live DAQ acquisition, switch to RUN mode (requires NI-DAQmx driver on Windows; simulated mode works on any platform).
 
 ## Installation
 

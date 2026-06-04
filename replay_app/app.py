@@ -375,6 +375,84 @@ def list_all_mat():
 
 
 # ---------------------------------------------------------------------------
+# RUN mode — live DAQ acquisition
+# ---------------------------------------------------------------------------
+
+_run_state = {"active": False, "stop": False, "ping": 0, "total": 0, "latest_file": None}
+
+
+@app.route("/api/run/start", methods=["POST"])
+def run_start():
+    """Start a live DAQ acquisition in a background thread."""
+    import threading
+    from echobot_daq import EchoBotConfig, run_acquisition, run_simulated
+
+    if _run_state["active"]:
+        return jsonify({"error": "Acquisition already running"}), 409
+
+    body = request.json or {}
+    simulate = body.get("simulate", True)  # default to simulated for safety
+
+    cfg = EchoBotConfig(
+        num_pings=int(body.get("num_pings", 100)),
+        scale_db=float(body.get("scale_db", 3.0)),
+        fqi=float(body.get("fqi", 150000)),
+        fqf=float(body.get("fqf", 90000)),
+        t_d=float(body.get("t_d", 5e-4)),
+        sound_speed=float(body.get("sound_speed", 1486.0)),
+        save_dir=body.get("save_dir", None),
+    )
+
+    _run_state["active"] = True
+    _run_state["stop"] = False
+    _run_state["ping"] = 0
+    _run_state["total"] = cfg.num_pings
+
+    def on_ping(idx, total, ping_data):
+        _run_state["ping"] = idx + 1
+        _run_state["total"] = total
+
+    def stop_flag():
+        return _run_state["stop"]
+
+    def run_thread():
+        try:
+            acquire = run_simulated if simulate else run_acquisition
+            result = acquire(cfg, on_ping=on_ping, stop_flag=stop_flag)
+            _run_state["latest_file"] = result.get("filepath")
+        except Exception as e:
+            print(f"Acquisition error: {e}")
+        finally:
+            _run_state["active"] = False
+
+    t = threading.Thread(target=run_thread, daemon=True)
+    t.start()
+
+    mode = "simulated" if simulate else "hardware"
+    return jsonify({"status": "started", "mode": mode, "num_pings": cfg.num_pings})
+
+
+@app.route("/api/run/stop", methods=["POST"])
+def run_stop():
+    """Stop a running acquisition."""
+    if not _run_state["active"]:
+        return jsonify({"error": "No acquisition running"}), 400
+    _run_state["stop"] = True
+    return jsonify({"status": "stopping"})
+
+
+@app.route("/api/run/status")
+def run_status():
+    """Get current acquisition status."""
+    return jsonify({
+        "active": _run_state["active"],
+        "ping": _run_state["ping"],
+        "total": _run_state["total"],
+        "latest_file": _run_state["latest_file"],
+    })
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
